@@ -25,6 +25,10 @@ type OldUsage struct {
 	IsHumgen            int
 }
 
+type KeyData struct {
+	PIs, Volumes, UnixGroups map[string]int
+}
+
 func main() {
 
 	/** Plan
@@ -76,7 +80,7 @@ func main() {
 		panic(err)
 	}
 
-	var pis map[string]int
+	pis := make(map[string]int)
 
 	for results.Next() {
 		var pi string
@@ -109,7 +113,7 @@ func main() {
 		panic(err)
 	}
 
-	var unixgroups map[string]int
+	unixgroups := make(map[string]int)
 
 	for results.Next() {
 		var unixgroup string
@@ -141,7 +145,7 @@ func main() {
 		panic(err)
 	}
 
-	var volumes map[string]int
+	volumes := make(map[string]int)
 
 	for results.Next() {
 		var volume string
@@ -168,14 +172,49 @@ func main() {
 	}
 
 	fmt.Println(pis, unixgroups, volumes)
+	keyData := KeyData{
+		PIs:        pis,
+		Volumes:    volumes,
+		UnixGroups: unixgroups,
+	}
 
 	// Process all records
-	jobs := make(chan OldUsage)
+	jobs := make(chan OldUsage, NUM_WORKERS)
 	var wg sync.WaitGroup
 
 	wg.Add(NUM_WORKERS)
 	for i := 0; i < NUM_WORKERS; i++ {
-		go transfer_worker(jobs, wg)
+		go transfer_worker(jobs, wg, keyData, db)
 	}
+
+	// Check the query
+	bigQuery, err := db.Query("SELECT (`Lustre Volume`, PI, `Unix Group`, Used, Quota, `Last Modified`, `Archived Directories`, Date, `Is Humgen`) FROM lustre_usage WHERE date > 2021-01-01")
+
+	if err != nil {
+		panic(err)
+	}
+
+	for bigQuery.Next() {
+		var dataPoint OldUsage
+		err = bigQuery.Scan(
+			&dataPoint.LustreVolume,
+			&dataPoint.PI,
+			&dataPoint.UnixGroup,
+			&dataPoint.Used,
+			&dataPoint.Quota,
+			&dataPoint.LastModified,
+			&dataPoint.ArchivedDirectories,
+			&dataPoint.Date,
+			&dataPoint.IsHumgen,
+		)
+
+		if err != nil {
+			panic(err)
+		}
+
+		jobs <- dataPoint
+	}
+	close(jobs)
+
 	wg.Wait()
 }
