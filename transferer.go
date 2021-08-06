@@ -1,33 +1,35 @@
 package main
 
 import (
-	"time"
 	"database/sql"
+	"fmt"
+	"sync"
+	"time"
+
 	_ "github.com/go-sql-driver/mysql"
 )
 
 const (
-	NUM_WORKERS = 100;
-
+	NUM_WORKERS = 100
 )
 
 type OldUsage struct {
-	LustreVolume string
-	PI string
-	UnixGroup string
-	Used int64
-	Quota int64
-	LastModified float32
+	LustreVolume        string
+	PI                  string
+	UnixGroup           string
+	Used                int64
+	Quota               int64
+	LastModified        float32
 	ArchivedDirectories string
-	Date time.Date
-	IsHumgen int
+	Date                time.Time
+	IsHumgen            int
 }
 
 func main() {
 
 	/** Plan
 	Firstly, connect to the DB
-	
+
 	Secondly, extract all the PIs, unixgroups and scratch volumes,
 	add them to new DB, get their new IDs and then store them here
 
@@ -37,9 +39,9 @@ func main() {
 	as they come in, by adding the relevant data to the correct places in the new schema.
 	*/
 
-	db_creds := struct{
+	db_creds := struct {
 		Host, User, Pass, Name string
-		Port int
+		Port                   int
 	}{
 		Host: "",
 		Port: 1234,
@@ -53,13 +55,11 @@ func main() {
 		"mysql",
 		fmt.Sprintf(
 			"%s:%s@%s:%v/%s",
-			DB_CREDS.User,
-			DB_CREDS.Pass,
-			DB_CREDS.Host,
-			DB_CREDS.Port,
-			DB_CREDS.Name
-		)
-	)
+			db_creds.User,
+			db_creds.Pass,
+			db_creds.Host,
+			db_creds.Port,
+			db_creds.Name))
 
 	if err != nil {
 		panic(err)
@@ -120,13 +120,12 @@ func main() {
 
 	fmt.Println(pis, unixgroups, volumes)
 
-
 	// Process all records
 	jobs := make(chan OldUsage)
 	var wg sync.WaitGroup
 
 	wg.Add(NUM_WORKERS)
-	for (i := 0; i<NUM_WORKERS; i++) {
+	for i := 0; i < NUM_WORKERS; i++ {
 		go transfer_worker(jobs, wg)
 	}
 	wg.Wait()

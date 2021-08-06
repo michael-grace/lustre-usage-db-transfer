@@ -32,5 +32,9 @@ CREATE TABLE hgi_lustre_usage.lustre_usage(
     pi_id int,
     unix_id int,
     volume_id int,
+
+    foreign key (pi_id) references hgi_lustre_usage.pi(pi_id),
+    foreign key (unix_id) references hgi_lustre_usage.unix_group(group_id),
+    foreign key (volume_id) references hgi_lustre_usage.volume(volume_id)
 );
 
