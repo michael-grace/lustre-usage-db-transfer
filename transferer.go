@@ -76,14 +76,31 @@ func main() {
 		panic(err)
 	}
 
-	var pis []string
+	var pis map[string]int
+
 	for results.Next() {
 		var pi string
 		err = results.Scan(&pi)
+
 		if err != nil {
 			panic(err)
 		}
-		pis = append(pis, pi)
+
+		_, err = db.Exec("INSERT INTO hgi_lustre_usage.pi (pi_name) VALUES (?);", pi)
+
+		if err != nil {
+			panic(err)
+		}
+
+		var new_pi_id int
+
+		err = db.QueryRow("SELECT pi_id FROM hgi_lustre_usage.pi WHERE pi_name = ?", pi).Scan(&new_pi_id)
+		if err != nil {
+			panic(err)
+		}
+
+		pis[pi] = new_pi_id
+
 	}
 
 	// Unixgroups
@@ -92,14 +109,30 @@ func main() {
 		panic(err)
 	}
 
-	var unixgroups []string
+	var unixgroups map[string]int
+
 	for results.Next() {
 		var unixgroup string
 		err = results.Scan(&unixgroup)
+
 		if err != nil {
 			panic(err)
 		}
-		unixgroups = append(unixgroups, unixgroup)
+
+		_, err = db.Exec("INSERT INTO hgi_lustre_usage.unix_group (group_name) VALUES (?);", unixgroup)
+
+		if err != nil {
+			panic(err)
+		}
+
+		var new_group_id int
+
+		err = db.QueryRow("SELECT group_id FROM hgi_lustre_usage.unix_group WHERE group_name = ?", unixgroup).Scan(&new_group_id)
+		if err != nil {
+			panic(err)
+		}
+
+		unixgroups[unixgroup] = new_group_id
 	}
 
 	// Lustre Volumes
@@ -108,14 +141,30 @@ func main() {
 		panic(err)
 	}
 
-	var volumes []string
+	var volumes map[string]int
+
 	for results.Next() {
 		var volume string
 		err = results.Scan(&volume)
+
 		if err != nil {
 			panic(err)
 		}
-		volumes = append(volumes, volume)
+
+		_, err = db.Exec("INSERT INTO hgi_lustre_usage.volume (volume_name) VALUES (?);", volume)
+
+		if err != nil {
+			panic(err)
+		}
+
+		var new_vol_id int
+
+		err = db.QueryRow("SELECT volume_id FROM hgi_lustre_usage.volume WHERE volume_name = ?", volume).Scan(&new_vol_id)
+		if err != nil {
+			panic(err)
+		}
+
+		volumes[volume] = new_vol_id
 	}
 
 	fmt.Println(pis, unixgroups, volumes)
