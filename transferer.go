@@ -3,10 +3,12 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -15,7 +17,7 @@ const (
 
 type OldUsage struct {
 	LustreVolume        string
-	PI                  string
+	PI                  sql.NullString
 	UnixGroup           string
 	Used                int64
 	Quota               int64
@@ -27,6 +29,14 @@ type OldUsage struct {
 
 type KeyData struct {
 	PIs, Volumes, UnixGroups map[string]int
+}
+
+type DBCreds struct {
+	Host string `yaml:"HOST"`
+	Port int    `yaml:"PORT"`
+	Name string `yaml:"NAME"`
+	User string `yaml:"USER"`
+	Pass string `yaml:"PASS"`
 }
 
 func main() {
@@ -43,22 +53,23 @@ func main() {
 	as they come in, by adding the relevant data to the correct places in the new schema.
 	*/
 
-	db_creds := struct {
-		Host, User, Pass, Name string
-		Port                   int
-	}{
-		Host: "",
-		Port: 1234,
-		User: "",
-		Pass: "",
-		Name: "",
+	configYamlFile, err := os.ReadFile("config.yml")
+	if err != nil {
+		panic(err)
+	}
+
+	var db_creds DBCreds
+	err = yaml.Unmarshal(configYamlFile, &db_creds)
+
+	if err != nil {
+		panic(err)
 	}
 
 	// DB Connections
 	db, err := sql.Open(
 		"mysql",
 		fmt.Sprintf(
-			"%s:%s@%s:%v/%s",
+			"%s:%s@tcp(%s:%v)/%s",
 			db_creds.User,
 			db_creds.Pass,
 			db_creds.Host,
@@ -75,7 +86,11 @@ func main() {
 	var results *sql.Rows
 
 	// PIs
-	results, err = db.Query("SELECT DISTINCT PI from lustre_usage")
+	// Quite a few entries here are NULL, which we need to deal with,
+	// because there's still current NULL entries
+	// When we do the main data transfer, it can be sorted there
+	// Here, we'll just pull the NOT NULL ones
+	results, err = db.Query("SELECT DISTINCT PI from hgi_lustre_usage.lustre_usage WHERE PI IS NOT NULL")
 	if err != nil {
 		panic(err)
 	}
@@ -90,7 +105,7 @@ func main() {
 			panic(err)
 		}
 
-		_, err = db.Exec("INSERT INTO hgi_lustre_usage.pi (pi_name) VALUES (?);", pi)
+		_, err = db.Exec("INSERT INTO hgi_lustre_usage_new.pi (pi_name) VALUES (?);", pi)
 
 		if err != nil {
 			panic(err)
@@ -98,7 +113,7 @@ func main() {
 
 		var new_pi_id int
 
-		err = db.QueryRow("SELECT pi_id FROM hgi_lustre_usage.pi WHERE pi_name = ?", pi).Scan(&new_pi_id)
+		err = db.QueryRow("SELECT pi_id FROM hgi_lustre_usage_new.pi WHERE pi_name = ?", pi).Scan(&new_pi_id)
 		if err != nil {
 			panic(err)
 		}
@@ -108,7 +123,8 @@ func main() {
 	}
 
 	// Unixgroups
-	results, err = db.Query("SELECT DISTINCT `Unix Group` from lustre_usage")
+	// This is only NULL for a few old records, so its safe to ignore it
+	results, err = db.Query("SELECT DISTINCT `Unix Group` from hgi_lustre_usage.lustre_usage WHERE `Unix Group` IS NOT NULL")
 	if err != nil {
 		panic(err)
 	}
@@ -123,7 +139,7 @@ func main() {
 			panic(err)
 		}
 
-		_, err = db.Exec("INSERT INTO hgi_lustre_usage.unix_group (group_name) VALUES (?);", unixgroup)
+		_, err = db.Exec("INSERT INTO hgi_lustre_usage_new.unix_group (group_name) VALUES (?);", unixgroup)
 
 		if err != nil {
 			panic(err)
@@ -131,7 +147,7 @@ func main() {
 
 		var new_group_id int
 
-		err = db.QueryRow("SELECT group_id FROM hgi_lustre_usage.unix_group WHERE group_name = ?", unixgroup).Scan(&new_group_id)
+		err = db.QueryRow("SELECT group_id FROM hgi_lustre_usage_new.unix_group WHERE group_name = ?", unixgroup).Scan(&new_group_id)
 		if err != nil {
 			panic(err)
 		}
@@ -140,7 +156,8 @@ func main() {
 	}
 
 	// Lustre Volumes
-	results, err = db.Query("SELECT DISTINCT `Lustre Volume` from lustre_usage")
+	// This is never null :)
+	results, err = db.Query("SELECT DISTINCT `Lustre Volume` from hgi_lustre_usage.lustre_usage")
 	if err != nil {
 		panic(err)
 	}
@@ -155,7 +172,7 @@ func main() {
 			panic(err)
 		}
 
-		_, err = db.Exec("INSERT INTO hgi_lustre_usage.volume (volume_name) VALUES (?);", volume)
+		_, err = db.Exec("INSERT INTO hgi_lustre_usage_new.volume (volume_name) VALUES (?);", volume)
 
 		if err != nil {
 			panic(err)
@@ -163,7 +180,7 @@ func main() {
 
 		var new_vol_id int
 
-		err = db.QueryRow("SELECT volume_id FROM hgi_lustre_usage.volume WHERE volume_name = ?", volume).Scan(&new_vol_id)
+		err = db.QueryRow("SELECT volume_id FROM hgi_lustre_usage_new.volume WHERE volume_name = ?", volume).Scan(&new_vol_id)
 		if err != nil {
 			panic(err)
 		}
@@ -188,7 +205,7 @@ func main() {
 	}
 
 	// Check the query
-	bigQuery, err := db.Query("SELECT (`Lustre Volume`, PI, `Unix Group`, Used, Quota, `Last Modified`, `Archived Directories`, Date, `Is Humgen`) FROM lustre_usage WHERE date > 2021-01-01")
+	bigQuery, err := db.Query("SELECT (`Lustre Volume`, PI, `Unix Group`, Used, Quota, `Last Modified`, `Archived Directories`, Date, `Is Humgen`) FROM lustre_usage WHERE date > 2021-08-01")
 
 	if err != nil {
 		panic(err)
