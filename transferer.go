@@ -151,7 +151,7 @@ func main() {
 
 		var new_group_id int
 
-		err = db.QueryRow("SELECT group_id FROM hgi_lustre_usage_new.unix_group WHERE group_name = ?", unixgroup).Scan(&new_group_id)
+		err = db.QueryRow("SELECT group_id FROM hgi_lustre_usage_new.unix_group WHERE group_name = ? AND is_humgen = ?", unixgroup, isHumgen == 1).Scan(&new_group_id)
 		if err != nil {
 			panic(err)
 		}
