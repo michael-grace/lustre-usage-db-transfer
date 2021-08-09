@@ -24,7 +24,7 @@ func transfer_worker(jobs <-chan OldUsage, wg sync.WaitGroup, keyData KeyData, d
 			(job.ArchivedDirectories != ""),
 			job.LastModified,
 			pi,
-			keyData.UnixGroups[job.UnixGroup],
+			keyData.UnixGroups[job.UnixGroup][job.IsHumgen == 1],
 			keyData.Volumes[job.LustreVolume])
 
 		if err != nil {

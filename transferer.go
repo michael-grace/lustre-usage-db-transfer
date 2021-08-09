@@ -28,7 +28,8 @@ type OldUsage struct {
 }
 
 type KeyData struct {
-	PIs, Volumes, UnixGroups map[string]int
+	PIs, Volumes map[string]int
+	UnixGroups   map[string]map[bool]int
 }
 
 type DBCreds struct {
@@ -66,6 +67,7 @@ func main() {
 	}
 
 	// DB Connections
+	fmt.Println("Connecting to DB")
 	db, err := sql.Open(
 		"mysql",
 		fmt.Sprintf(
@@ -86,6 +88,7 @@ func main() {
 	var results *sql.Rows
 
 	// PIs
+	fmt.Println("PIs")
 	// Quite a few entries here are NULL, which we need to deal with,
 	// because there's still current NULL entries
 	// When we do the main data transfer, it can be sorted there
@@ -123,23 +126,25 @@ func main() {
 	}
 
 	// Unixgroups
+	fmt.Println("Unix Groups")
 	// This is only NULL for a few old records, so its safe to ignore it
-	results, err = db.Query("SELECT DISTINCT `Unix Group` from hgi_lustre_usage.lustre_usage WHERE `Unix Group` IS NOT NULL")
+	results, err = db.Query("SELECT DISTINCT `Unix Group`, `IsHumgen` from hgi_lustre_usage.lustre_usage WHERE `Unix Group` IS NOT NULL")
 	if err != nil {
 		panic(err)
 	}
 
-	unixgroups := make(map[string]int)
+	unixgroups := make(map[string]map[bool]int)
 
 	for results.Next() {
 		var unixgroup string
-		err = results.Scan(&unixgroup)
+		var isHumgen int
+		err = results.Scan(&unixgroup, &isHumgen)
 
 		if err != nil {
 			panic(err)
 		}
 
-		_, err = db.Exec("INSERT INTO hgi_lustre_usage_new.unix_group (group_name) VALUES (?);", unixgroup)
+		_, err = db.Exec("INSERT INTO hgi_lustre_usage_new.unix_group (group_name, is_humgen) VALUES (?, ?);", unixgroup, isHumgen == 1)
 
 		if err != nil {
 			panic(err)
@@ -152,10 +157,15 @@ func main() {
 			panic(err)
 		}
 
-		unixgroups[unixgroup] = new_group_id
+		if unixgroups[unixgroup] == nil {
+			unixgroups[unixgroup] = make(map[bool]int)
+		}
+
+		unixgroups[unixgroup][isHumgen == 1] = new_group_id
 	}
 
 	// Lustre Volumes
+	fmt.Println("Lustre Volumes")
 	// This is never null :)
 	results, err = db.Query("SELECT DISTINCT `Lustre Volume` from hgi_lustre_usage.lustre_usage")
 	if err != nil {
@@ -172,7 +182,7 @@ func main() {
 			panic(err)
 		}
 
-		_, err = db.Exec("INSERT INTO hgi_lustre_usage_new.volume (volume_name) VALUES (?);", volume)
+		_, err = db.Exec("INSERT INTO hgi_lustre_usage_new.volume (scratch_disk) VALUES (?);", volume)
 
 		if err != nil {
 			panic(err)
@@ -180,7 +190,7 @@ func main() {
 
 		var new_vol_id int
 
-		err = db.QueryRow("SELECT volume_id FROM hgi_lustre_usage_new.volume WHERE volume_name = ?", volume).Scan(&new_vol_id)
+		err = db.QueryRow("SELECT volume_id FROM hgi_lustre_usage_new.volume WHERE scratch_disk = ?", volume).Scan(&new_vol_id)
 		if err != nil {
 			panic(err)
 		}
@@ -196,6 +206,7 @@ func main() {
 	}
 
 	// Process all records
+	fmt.Println("Processing Main Data")
 	jobs := make(chan OldUsage, NUM_WORKERS)
 	var wg sync.WaitGroup
 
@@ -205,7 +216,7 @@ func main() {
 	}
 
 	// Check the query
-	bigQuery, err := db.Query("SELECT (`Lustre Volume`, PI, `Unix Group`, Used, Quota, `Last Modified`, `Archived Directories`, Date, `Is Humgen`) FROM lustre_usage WHERE date > 2021-08-01")
+	bigQuery, err := db.Query("SELECT (`Lustre Volume`, PI, `Unix Group`, Used, Quota, `Last Modified`, `Archived Directories`, Date, `Is Humgen`) FROM lustre_usage WHERE date > 2021-08-01 AND `Unix Group` IS NOT NULL")
 
 	if err != nil {
 		panic(err)
