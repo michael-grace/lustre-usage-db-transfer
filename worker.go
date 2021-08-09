@@ -5,7 +5,7 @@ import (
 	"sync"
 )
 
-func transfer_worker(jobs <-chan OldUsage, wg sync.WaitGroup, keyData KeyData, db *sql.DB) {
+func transfer_worker(jobs <-chan OldUsage, wg *sync.WaitGroup, keyData KeyData, db *sql.DB) {
 	for job := range jobs {
 		// Process the Transfer
 
@@ -17,11 +17,11 @@ func transfer_worker(jobs <-chan OldUsage, wg sync.WaitGroup, keyData KeyData, d
 			pi = nil
 		}
 
-		_, err := db.Exec("INSERT INTO hgi_lustre_usage_new.lustre_usage (used, quote, record_date, archived, last_modified, pi_id, unix_id, volume_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);",
+		_, err := db.Exec("INSERT INTO hgi_lustre_usage_new.lustre_usage (used, quota, record_date, archived, last_modified, pi_id, unix_id, volume_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
 			job.Used,
 			job.Quota,
 			job.Date,
-			(job.ArchivedDirectories != ""),
+			job.ArchivedDirectories.Valid,
 			job.LastModified,
 			pi,
 			keyData.UnixGroups[job.UnixGroup][job.IsHumgen == 1],

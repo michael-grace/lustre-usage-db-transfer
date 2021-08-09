@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"sync"
-	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"gopkg.in/yaml.v2"
@@ -20,10 +19,10 @@ type OldUsage struct {
 	PI                  sql.NullString
 	UnixGroup           string
 	Used                int64
-	Quota               int64
+	Quota               sql.NullInt64
 	LastModified        float32
-	ArchivedDirectories string
-	Date                time.Time
+	ArchivedDirectories sql.NullString
+	Date                []uint8
 	IsHumgen            int
 }
 
@@ -198,7 +197,6 @@ func main() {
 		volumes[volume] = new_vol_id
 	}
 
-	fmt.Println(pis, unixgroups, volumes)
 	keyData := KeyData{
 		PIs:        pis,
 		Volumes:    volumes,
@@ -212,11 +210,11 @@ func main() {
 
 	wg.Add(NUM_WORKERS)
 	for i := 0; i < NUM_WORKERS; i++ {
-		go transfer_worker(jobs, wg, keyData, db)
+		go transfer_worker(jobs, &wg, keyData, db)
 	}
 
 	// Check the query
-	bigQuery, err := db.Query("SELECT (`Lustre Volume`, PI, `Unix Group`, Used, Quota, `Last Modified`, `Archived Directories`, Date, `Is Humgen`) FROM lustre_usage WHERE date > 2021-08-01 AND `Unix Group` IS NOT NULL")
+	bigQuery, err := db.Query("SELECT `Lustre Volume`, PI, `Unix Group`, `Used (bytes)`, `Quota (bytes)`, `Last Modified (days)`, `Archived Directories`, Date, `IsHumgen` FROM lustre_usage WHERE Date > '2021-07-01' AND `Unix Group` IS NOT NULL")
 
 	if err != nil {
 		panic(err)
