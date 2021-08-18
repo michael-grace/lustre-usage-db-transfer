@@ -49,6 +49,46 @@ func transfer_worker(jobs <-chan OldRecord, wg *sync.WaitGroup, keyData KeyData,
 		if err != nil {
 			panic(err)
 		}
+
+		var new_record_id int
+		// Technically, this might not be unique, but searching by directory is a big no-no cause it could be NULL
+		// So, searching by number of files because it is _very probably_ unique
+		err = db.QueryRow("SELECT directory_id FROM hgi_lustre_usage_new.directory WHERE project_name = ? AND num_files = ?", job.Project, job.Files).Scan(&new_record_id)
+		if err != nil {
+			panic(err)
+		}
+
+		// File Types
+		// Just hardcoding these foreign keys, not pulling from the DB
+
+		/**
+
+		BAM: 	1
+		CRAM: 	2
+		VCF: 	3
+		PEDBED: 4
+
+		*/
+
+		_, err = db.Exec(`INSERT INTO hgi_lustre_usage_new.file_size (directory_id, filetype_id, size)
+		VALUES (?, ?, ?), (?, ?, ?), (?, ?, ?), (?, ?, ?)`,
+			new_record_id,
+			1,
+			job.BAM,
+			new_record_id,
+			2,
+			job.CRAM,
+			new_record_id,
+			3,
+			job.VCF,
+			new_record_id,
+			4,
+			job.PEDBED,
+		)
+
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	wg.Done()
