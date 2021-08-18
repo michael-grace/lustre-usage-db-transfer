@@ -213,7 +213,6 @@ func main() {
 		go transfer_worker(jobs, &wg, keyData, db)
 	}
 
-	// Check the query
 	bigQuery, err := db.Query("SELECT `Lustre Volume`, PI, `Unix Group`, `Used (bytes)`, `Quota (bytes)`, `Last Modified (days)`, `Archived Directories`, Date, `IsHumgen` FROM lustre_usage WHERE Date > '2021-07-01' AND `Unix Group` IS NOT NULL")
 
 	if err != nil {

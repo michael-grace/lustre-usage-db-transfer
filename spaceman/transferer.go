@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"sync"
 
 	_ "github.com/go-sql-driver/mysql"
 	"gopkg.in/yaml.v2"
@@ -25,13 +26,12 @@ type OldRecord struct {
 	PEDBED       float32
 	LastModified float32
 	PI           string // PI and UnixGroup don't use NULL, they use "-"
-	ProjectTotal float32
 	UnixGroup    string
 }
 
 type KeyData struct {
 	PIs, Volumes map[string]int
-	UnixGroups   map[string]map[bool]int
+	UnixGroups   map[string]map[int]int
 }
 
 type DBCreds struct {
@@ -263,4 +263,53 @@ func main() {
 			volumes[volume_name] = new_vol_id
 		}
 	}
+
+	// OK, lets worry about transferring some actual data
+	keyData := KeyData{
+		PIs:        pis,
+		Volumes:    volumes,
+		UnixGroups: groups,
+	}
+
+	fmt.Println("Processing Main Data")
+	jobs := make(chan OldRecord, NUM_WORKERS)
+	var wg sync.WaitGroup
+
+	wg.Add(NUM_WORKERS)
+	for i := 0; i < NUM_WORKERS; i++ {
+		go transfer_worker(jobs, &wg, keyData, db)
+	}
+
+	bigQuery, err := db.Query("SELECT Project, Directory, Volume, Files, Total, BAM, CRAM, VCF, PEDBED, `Last Modified (days)`, PI, `Unix Group` FROM hgi_lustre_usage.spaceman")
+
+	if err != nil {
+		panic(err)
+	}
+
+	for bigQuery.Next() {
+		var dataPoint OldRecord
+		err = bigQuery.Scan(
+			&dataPoint.Project,
+			&dataPoint.Directory,
+			&dataPoint.Volume,
+			&dataPoint.Files,
+			&dataPoint.Total,
+			&dataPoint.BAM,
+			&dataPoint.CRAM,
+			&dataPoint.VCF,
+			&dataPoint.PEDBED,
+			&dataPoint.LastModified,
+			&dataPoint.PI,
+			&dataPoint.UnixGroup,
+		)
+
+		if err != nil {
+			panic(err)
+		}
+
+		jobs <- dataPoint
+	}
+	close(jobs)
+
+	wg.Wait()
 }
