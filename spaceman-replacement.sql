@@ -24,13 +24,13 @@ CREATE TABLE hgi_lustre_usage_new.filetype(
     primary key(filetype_id)
 );
 
-CREATE TABLE hgi_lustre_usage_new.file_count(
-    file_count_id int AUTO_INCREMENT,
+CREATE TABLE hgi_lustre_usage_new.file_size(
+    file_size_id int AUTO_INCREMENT,
     directory_id int,
     filetype_id int,
-    total int,
+    size float,
 
-    primary key(file_count_id),
+    primary key(file_size_id),
 
     foreign key (directory_id) references hgi_lustre_usage_new.directory(directory_id),
     foreign key (filetype_id) references hgi_lustre_usage_new.filetype(filetype_id)
