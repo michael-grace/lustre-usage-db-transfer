@@ -42,3 +42,23 @@ alter table unix_group drop column is_humgen;
 
 alter table lustre_usage drop column archived;
 
+alter table directory drop column project_name;
+
+alter table directory
+	add base_directory_id int null;
+
+drop index volume_id on directory;
+
+alter table directory drop foreign key directory_ibfk_3;
+
+alter table directory drop column volume_id;
+
+create index volume_id
+	on directory (volume_id);
+
+alter table directory
+	add constraint directory_base_directory_base_directory_id_fk
+		foreign key (base_directory_id) references base_directory (base_directory_id);
+
+
+
